@@ -25,6 +25,7 @@ interface ReleaseViewerProps {
   isGenerating: boolean;
   currentRelease: GeneratedRelease | null;
   notesCount: number;
+  totalNotesCount: number;
 }
 
 export default function ReleaseViewer({
@@ -32,14 +33,245 @@ export default function ReleaseViewer({
   isGenerating,
   currentRelease,
   notesCount,
+  totalNotesCount,
 }: ReleaseViewerProps) {
   const [activeTab, setActiveTab] = useState<"complete" | "email" | "teams" | "whatsapp">("complete");
   const [copied, setCopied] = useState(false);
+  const [showPrintBanner, setShowPrintBanner] = useState(false);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePrintAndDownload = () => {
+    if (!currentRelease) return;
+
+    // 1. Try native printing
+    try {
+      window.print();
+    } catch (e) {
+      console.warn("Impressão bloqueada pelo sandbox do iframe, prosseguindo com o download do HTML de alta fidelidade.");
+    }
+
+    // 2. Generate and download clean high-fidelity HTML file with Unitá corporate header and auto-trigger
+    const mdLines = currentRelease.reportComplete.split("\n");
+    let htmlContent = "";
+    mdLines.forEach((line) => {
+      if (line.startsWith("# ")) {
+        htmlContent += `<h1 style="font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 800; color: #0f172a; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px;">${line.replace("# ", "")}</h1>`;
+      } else if (line.startsWith("## ")) {
+        htmlContent += `<h2 style="font-family: 'Outfit', sans-serif; font-size: 18px; font-weight: 700; color: #1e293b; margin-top: 20px; margin-bottom: 12px;">${line.replace("## ", "")}</h2>`;
+      } else if (line.startsWith("### ")) {
+        htmlContent += `<h3 style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 700; color: #4338ca; margin-top: 16px; margin-bottom: 8px;">${line.replace("### ", "")}</h3>`;
+      } else if (line.startsWith("- ") || line.startsWith("* ")) {
+        htmlContent += `<li style="font-size: 14px; color: #334155; margin-left: 16px; list-style-type: disc; margin-bottom: 4px; line-height: 1.6;">${line.substring(2)}</li>`;
+      } else if (line.trim() === "") {
+        // Simple break space
+      } else {
+        htmlContent += `<p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 8px;">${line}</p>`;
+      }
+    });
+
+    const fullHtml = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release Semanal Unitá Engenharia - ${formatShortDate(currentRelease.startDate)} a ${formatShortDate(currentRelease.endDate)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 40px 20px;
+      color: #0f172a;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .print-area {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 48px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+    .unita-logo {
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .unita-text {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      color: #030712;
+      line-height: 1;
+      position: relative;
+      padding-right: 12px;
+    }
+    .unita-orange-bar {
+      position: absolute;
+      top: 3.5px;
+      right: 0;
+      width: 9px;
+      height: 5px;
+      background-color: #E65A10;
+      border-radius: 2px;
+      transform: rotate(-22deg);
+    }
+    .unita-subtext {
+      font-size: 7.6px;
+      font-weight: 800;
+      letter-spacing: 0.41em;
+      color: #64748b;
+      text-transform: uppercase;
+      margin-top: 6px;
+      line-height: 1;
+    }
+    .banner {
+      max-width: 800px;
+      margin: 24px auto 0 auto;
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #1e40af;
+      font-size: 13px;
+    }
+    .banner button {
+      background-color: #2563eb;
+      color: #ffffff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .banner button:hover {
+      background-color: #1d4ed8;
+    }
+    @media print {
+      body {
+        background-color: #ffffff !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-area {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-area">
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 24px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div class="unita-logo">
+          <div class="unita-text">
+            unıta
+            <div class="unita-orange-bar"></div>
+          </div>
+          <div class="unita-subtext">ENGENHARIA</div>
+        </div>
+        <div style="width: 1px; height: 40px; background-color: #cbd5e1;"></div>
+        <div>
+          <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; display: block;">DIVISÃO DE COMPLIANCE</span>
+          <span style="font-size: 11px; font-weight: 600; color: #334155; display: block; margin-top: 4px;">SISTEMA DE GESTÃO DE TERCEIROS</span>
+        </div>
+      </div>
+      
+      <div style="font-family: monospace; font-size: 10px; color: #64748b; text-align: right; line-height: 1.5;">
+        <div><strong>REF:</strong> REL-SEMANAL-T3-${currentRelease.startDate.replace(/-/g, "")}</div>
+        <div><strong>DATA:</strong> ${formatShortDate(new Date().toISOString().split("T")[0])}</div>
+        <div><strong>SITUAÇÃO:</strong> LIBERADO PARA DIRETORIA</div>
+      </div>
+    </div>
+
+    <!-- Metadata Grid -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; margin-bottom: 32px; font-size: 11px;">
+      <div>
+        <span style="display: block; font-weight: 700; color: #94a3b8; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; margin-bottom: 2px;">Emissor</span>
+        <span style="font-weight: 600; color: #1e293b;">Depto. de Compliance de Terceiros</span>
+      </div>
+      <div>
+        <span style="display: block; font-weight: 700; color: #94a3b8; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; margin-bottom: 2px;">Período</span>
+        <span style="font-weight: 600; color: #1e293b;">De ${formatShortDate(currentRelease.startDate)} a ${formatShortDate(currentRelease.endDate)}</span>
+      </div>
+      <div>
+        <span style="display: block; font-weight: 700; color: #94a3b8; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; margin-bottom: 2px;">Responsabilidade</span>
+        <span style="font-weight: 600; color: #1e293b;">Gestão Unificada Unitá</span>
+      </div>
+      <div>
+        <span style="display: block; font-weight: 700; color: #94a3b8; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; margin-bottom: 2px;">Classificação</span>
+        <span style="font-weight: 700; color: #E65A10;">CONFIDENCIAL DIRETORIA</span>
+      </div>
+    </div>
+
+    <!-- Document Content -->
+    <div style="font-family: 'Inter', sans-serif; color: #334155;">
+      ${htmlContent}
+    </div>
+
+    <!-- Signatures -->
+    <div style="margin-top: 56px; padding-top: 48px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; text-align: center; font-size: 12px; color: #64748b;">
+      <div>
+        <div style="width: 192px; height: 1px; background-color: #cbd5e1; margin: 0 auto 8px auto;"></div>
+        <p style="font-weight: 700; color: #1e293b; margin: 0;">Gargalo e Compliance de Subempreiteiras</p>
+        <p style="font-size: 10px; color: #94a3b8; margin: 2px 0 0 0;">Elaborado por IA — Departamento de Terceiros Unitá</p>
+      </div>
+      <div>
+        <div style="width: 192px; height: 1px; background-color: #cbd5e1; margin: 0 auto 8px auto;"></div>
+        <p style="font-weight: 700; color: #1e293b; margin: 0;">Visto de Gerência de Engenharia</p>
+        <p style="font-size: 10px; color: #94a3b8; margin: 2px 0 0 0;">Validação e Arquivo de Obras Unitá Engenharia</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="banner no-print">
+    <span>O diálogo de impressão do seu navegador foi acionado automaticamente. Você também pode salvar este arquivo como PDF em formato Timbrado.</span>
+    <button onclick="window.print()">Imprimir / Salvar PDF</button>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    };
+  </script>
+</body>
+</html>`;
+
+    // Trigger local download link securely
+    const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Unita_Release_Semanal_${currentRelease.startDate}.html`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Show nice informative status box
+    setShowPrintBanner(true);
+    setTimeout(() => {
+      setShowPrintBanner(false);
+    }, 12000);
   };
 
   // Simple Markdown-like renderer to make the Executive Report look super clean in HTML
@@ -212,7 +444,61 @@ export default function ReleaseViewer({
 
           {/* Active Content Preview Tab Box */}
           <div className="p-6 relative">
-            <div className="absolute right-6 top-4 z-5 flex items-center gap-2">
+            {currentRelease.isFallback && (
+              <div className="no-print mb-6 p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-slate-800 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-slate-200 antialiased text-xs flex flex-col space-y-1 shadow-3xs">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-400">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Relatório Consolidado via Inteligência de Contingência</span>
+                </div>
+                <p className="opacity-95 leading-relaxed m-0 mt-0.5 whitespace-normal">
+                  Devido à altíssima demanda do servidor de IA do Google (Limite de Cota Atingido), nosso <strong>Motor Local de Compliance da Unitá</strong> assumiu o processamento de forma inteligente. Suas anotações foram analisadas e os modelos abaixo foram gerados com total rigor corporativo e qualidade técnica!
+                </p>
+              </div>
+            )}
+
+            {/* Custom Dynamic Print Style Sheet embedded */}
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                /* Hide everything except the printable report */
+                body * {
+                  visibility: hidden !important;
+                }
+                #unita-printable-report, #unita-printable-report * {
+                  visibility: visible !important;
+                }
+                #unita-printable-report {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  padding: 40px !important;
+                  background: white !important;
+                  color: black !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                }
+                /* Exclude elements marked as no-print */
+                .no-print {
+                  display: none !important;
+                }
+                /* Keep simple dark text for print */
+                h1, h2, h3, h4, p, li, span, td, border {
+                  color: black !important;
+                  border-color: #d1d5db !important;
+                }
+              }
+            `}} />
+
+            <div className="absolute right-6 top-4 z-10 flex items-center gap-2">
+              {activeTab === "complete" && (
+                <button
+                  onClick={handlePrintAndDownload}
+                  className="inline-flex items-center gap-1.5 select-none text-2xs cursor-pointer bg-[#E65A10] text-white px-3.5 py-1.5 rounded-lg hover:bg-[#c84e0b] shadow-3xs hover:shadow-2xs transition duration-150 font-semibold"
+                >
+                  <Download className="h-3 w-3 text-white" />
+                  <span>Imprimir / Salvar PDF</span>
+                </button>
+              )}
               <button
                 onClick={() => handleCopy(getActiveText())}
                 className="inline-flex items-center gap-1.5 select-none text-2xs cursor-pointer bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition dark:bg-slate-850 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -232,10 +518,104 @@ export default function ReleaseViewer({
             </div>
 
             {/* Structured Tab viewports */}
-            <div className="prose prose-slate max-w-none pt-4">
+            <div className="prose prose-slate max-w-none pt-6">
+              {activeTab === "complete" && showPrintBanner && (
+                <div className="no-print mb-5 p-4 rounded-xl bg-orange-50 border border-orange-200 text-slate-900 dark:bg-slate-950/45 dark:border-orange-950/30 dark:text-slate-105 antialiased text-xs flex flex-col space-y-1 shadow-2xs">
+                  <div className="font-bold flex items-center gap-1.5 text-orange-700 dark:text-orange-400">
+                    <span className="h-2 w-2 rounded-full bg-[#E65A10] animate-ping"></span>
+                    <span>Relatório Timbrado Baixado com Sucesso!</span>
+                  </div>
+                  <p className="opacity-95 leading-relaxed m-0 mt-1">
+                    Como a pré-visualização do chat limita a impressão direta por regras de segurança do navegador, 
+                    <strong> nós geramos e baixamos automaticamente um arquivo de altíssima definição <code>Unita_Release_Semanal.html</code></strong> em sua máquina. 
+                    Abra este arquivo em seu computador (fora do painel) para ver o papel timbrado corporativo oficial e imprimir ou exportar para PDF com perfeição instantaneamente.
+                  </p>
+                </div>
+              )}
+
               {activeTab === "complete" && (
-                <div className="bg-slate-50/40 p-5 rounded-xl border border-slate-100 dark:bg-slate-950/20 dark:border-slate-800/40">
-                  {renderMarkdown(currentRelease.reportComplete)}
+                <div 
+                  id="unita-printable-report" 
+                  className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl border border-slate-200/90 shadow-2xs dark:bg-slate-900/40 dark:border-slate-800 dark:text-slate-100 transition-colors duration-150"
+                >
+                  {/* Unitá Official Designed Header Section for construction companies */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b-2 border-slate-900 pb-5 mb-6 dark:border-slate-700">
+                    <div className="flex items-center gap-4">
+                      {/* Accurate Unitá Engenharia logo SVG/HTML implementation */}
+                      <div className="flex flex-col items-start select-none font-sans">
+                        <div className="flex items-baseline relative pr-2">
+                          <span className="text-3xl font-extrabold tracking-tighter text-slate-950 dark:text-white leading-none">
+                            unıta
+                          </span>
+                          {/* Corporate Orange accent bar scaled */}
+                          <div className="absolute top-[3px] right-0 w-[9px] h-[4px] bg-[#E65A10] rounded-xs transform -rotate-[22deg]"></div>
+                        </div>
+                        <span className="text-[7.6px] font-bold tracking-[0.41em] text-slate-505 dark:text-slate-400 uppercase mt-1.5 leading-none">
+                          ENGENHARIA
+                        </span>
+                      </div>
+                      
+                      <div className="hidden sm:block h-10 w-px bg-slate-300 dark:bg-slate-700"></div>
+                      
+                      <div className="hidden sm:block">
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-500 block leading-none">
+                          DIVISÃO DE COMPLIANCE
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mt-1">
+                          SISTEMA DE GESTÃO DE TERCEIROS
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 sm:mt-0 text-left sm:text-right font-mono text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5 border-t border-dashed border-slate-200 pt-3 w-full sm:pt-0 sm:border-t-0 sm:w-auto">
+                      <div><strong>REF:</strong> REL-SEMANAL-T3-{currentRelease.startDate.replace(/-/g, "")}</div>
+                      <div><strong>DATA:</strong> {formatShortDate(new Date().toISOString().split("T")[0])}</div>
+                      <div><strong>SITUAÇÃO:</strong> LIBERADO PARA DIRETORIA</div>
+                    </div>
+                  </div>
+
+                  {/* Document Dossier Metadata Matrix */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 border border-slate-200/60 p-4 rounded-xl mb-8 text-[11px] text-slate-700 dark:bg-slate-950/40 dark:border-slate-800 dark:text-slate-300">
+                    <div>
+                      <span className="block font-bold text-slate-450 dark:text-slate-500 uppercase text-[9px] tracking-wider mb-0.5">Emissor</span>
+                      <span className="font-semibold text-slate-850 dark:text-white">Depto. de Compliance de Terceiros</span>
+                    </div>
+                    <div>
+                      <span className="block font-bold text-slate-450 dark:text-slate-500 uppercase text-[9px] tracking-wider mb-0.5">Período Relacionado</span>
+                      <span className="font-semibold text-slate-850 dark:text-white">De {formatShortDate(currentRelease.startDate)} a {formatShortDate(currentRelease.endDate)}</span>
+                    </div>
+                    <div>
+                      <span className="block font-bold text-slate-450 dark:text-slate-500 uppercase text-[9px] tracking-wider mb-0.5">Responsabilidade</span>
+                      <span className="font-semibold text-slate-850 dark:text-white">Gestão Unificada Unitá</span>
+                    </div>
+                    <div>
+                      <span className="block font-bold text-slate-450 dark:text-slate-500 uppercase text-[9px] tracking-wider mb-0.5">Classificação</span>
+                      <span className="font-semibold text-[#E65A10] flex items-center gap-1 font-bold">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#E65A10]"></span>
+                        CONCEITO EXECUTIVO CONFIDENCIAL
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Document Core Information */}
+                  <div className="space-y-4 pt-1">
+                    {renderMarkdown(currentRelease.reportComplete)}
+                  </div>
+
+                  {/* Standard Signatures line for construction company validation */}
+                  <div className="mt-14 pt-12 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                    <div className="space-y-1.5">
+                      <div className="mx-auto w-48 h-px bg-slate-300 dark:bg-slate-700"></div>
+                      <p className="font-bold text-slate-800 dark:text-slate-250">Gargalo e Compliance de Subempreiteiras</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Elaborado por IA — Departamento de Terceiros Unitá</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="mx-auto w-48 h-px bg-slate-300 dark:bg-slate-700"></div>
+                      <p className="font-bold text-slate-800 dark:text-slate-250">Visto de Gerência de Engenharia</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Validação e Arquivo de Obras Unitá Engenharia</p>
+                    </div>
+                  </div>
+
                 </div>
               )}
 
@@ -291,18 +671,40 @@ export default function ReleaseViewer({
           </div>
         </div>
       ) : (
-        <div className="p-12 text-center">
+        <div className="p-10 text-center space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 border border-slate-100 text-slate-400 dark:bg-slate-950/50 dark:border-slate-800">
             <Sparkles className="h-6 w-6 text-indigo-400 dark:text-indigo-600" />
           </div>
-          <h3 className="mt-4 font-display font-bold text-slate-800 dark:text-slate-200">
-            Nenhum Release Semanal ativo
-          </h3>
-          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            {notesCount > 0 
-              ? "Você tem anotações cadastradas! Clique no botão \"Gerar Release Semanal\" no topo para que a Inteligência Artificial elabore os relatórios executivos de alto impacto."
-              : "Escreva suas anotações corporativas no campo de registros à esquerda. Assim que registrar suas atividades, você poderá acionar a IA para transformá-las em um release completo."}
-          </p>
+          <div className="space-y-1">
+            <h3 className="font-display font-bold text-slate-800 dark:text-slate-200">
+              Nenhum Release Semanal ativo
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              {notesCount > 0 
+                ? "Você possui atividades registradas para esta semana! Clique no botão verde \"Gerar Release Semanal\" acima para acionar nossa Inteligência de Compliance de Terceiros."
+                : "Escreva suas atividades corporativas no campo de registros à esquerda."}
+            </p>
+          </div>
+
+          {notesCount === 0 && totalNotesCount > 0 && (
+            <div className="mt-4 p-4 rounded-xl bg-amber-50/50 border border-amber-200 text-left text-xs text-amber-900 dark:bg-amber-950/15 dark:border-amber-900/30 dark:text-amber-200 space-y-1">
+              <p className="font-bold flex items-center gap-1 text-amber-800 dark:text-amber-400">
+                <HelpCircle className="h-4 w-4" />
+                <span>Observação sobre os Registros Cadastrados:</span>
+              </p>
+              <p className="leading-relaxed text-slate-600 dark:text-slate-400">
+                Você possui <strong className="text-slate-900 dark:text-white">{totalNotesCount} anotação(ões) cadastrada(s)</strong> no sistema, mas elas estão com datas que caem em outros períodos/semanas. 
+                Por isso, a semana atual está vazia e o botão de geração fica desativado. 
+              </p>
+              <div className="pt-2 text-[11px] leading-relaxed text-slate-705 dark:text-slate-300">
+                <strong>💡 Como corrigir isso rapidamente:</strong>
+                <ul className="list-disc ml-4 space-y-1 mt-1">
+                  <li>Use o seletor de semanas no topo da tela para navegar até a data em que cadastrou as atividades.</li>
+                  <li>Ou exclua e recrie a atividade alterando o campo <strong>"Data do Registro"</strong> para corresponder à semana atual.</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

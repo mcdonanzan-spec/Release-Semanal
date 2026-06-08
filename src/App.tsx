@@ -179,7 +179,8 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Erro de processamento da IA");
+        const errorJson = await response.json().catch(() => ({}));
+        throw new Error(errorJson.details || errorJson.error || "Erro de processamento da IA");
       }
 
       const resData = await response.json();
@@ -197,17 +198,23 @@ export default function App() {
           reportEmail: aiOutput.reportEmail,
           reportTeams: aiOutput.reportTeams,
           reportWhatsApp: aiOutput.reportWhatsApp,
+          isFallback: !!resData.isFallback,
         };
 
         const filteredHistory = historyReleases.filter(
           (r) => !(r.startDate === selectedWeek.start && r.endDate === selectedWeek.end)
         );
         saveReleasesToStorage([newRelease, ...filteredHistory]);
-        showToast("Seu Release Semanal foi gerado com sucesso!");
+        
+        if (resData.isFallback) {
+          showToast("Release processado com sucesso via Motor Local (Limite de IA atingido)!");
+        } else {
+          showToast("Seu Release Semanal foi gerado com sucesso!");
+        }
       }
     } catch (e: any) {
       console.error(e);
-      showToast("Ops! Houve uma falha ao contatar o servidor Gemini. Verifique as credenciais.");
+      showToast(`Ops! Falha ao gerar: ${e.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -283,6 +290,7 @@ export default function App() {
               isGenerating={isGenerating}
               currentRelease={currentWeekRelease}
               notesCount={currentWeekNotes.length}
+              totalNotesCount={notes.length}
             />
 
             {/* Past historical consultations saved */}
