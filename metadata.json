@@ -1,0 +1,8 @@
+{
+  "name": "Release Semanal",
+  "description": "Anotações rápidas semanais organizadas automaticamente por IA e gerador de relatórios executivos de alta performance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
