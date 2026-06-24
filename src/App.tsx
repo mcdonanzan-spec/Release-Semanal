@@ -178,9 +178,22 @@ export default function App() {
         }),
       });
 
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+
       if (!response.ok) {
-        const errorJson = await response.json().catch(() => ({}));
-        throw new Error(errorJson.details || errorJson.error || "Erro de processamento da IA");
+        let errorMessage = "Erro de processamento da IA";
+        if (isJson) {
+          const errorJson = await response.json().catch(() => ({}));
+          errorMessage = errorJson.details || errorJson.error || errorMessage;
+        } else {
+          errorMessage = `Erro ${response.status}: Servidor indisponível ou em processo de reinicialização. Por favor, aguarde 5 segundos e tente novamente.`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (!isJson) {
+        throw new Error("Resposta inesperada do servidor (HTML). Se o ambiente acabou de ser atualizado, o servidor pode estar reiniciando. Aguarde alguns segundos e clique novamente.");
       }
 
       const resData = await response.json();
@@ -199,6 +212,8 @@ export default function App() {
           reportTeams: aiOutput.reportTeams,
           reportWhatsApp: aiOutput.reportWhatsApp,
           isFallback: !!resData.isFallback,
+          fallbackReason: resData.fallbackReason,
+          errorDetails: resData.errorDetails,
         };
 
         const filteredHistory = historyReleases.filter(
@@ -207,7 +222,15 @@ export default function App() {
         saveReleasesToStorage([newRelease, ...filteredHistory]);
         
         if (resData.isFallback) {
-          showToast("Release processado com sucesso via Motor Local (Limite de IA atingido)!");
+          if (resData.fallbackReason === "no_api_key") {
+            showToast("Atenção: Motor Local ativado. A chave GEMINI_API_KEY não foi configurada nos Secrets!");
+          } else if (resData.fallbackReason === "invalid_api_key") {
+            showToast("Atenção: Motor Local ativado. A chave GEMINI_API_KEY configurada é inválida!");
+          } else if (resData.fallbackReason === "quota_exhausted") {
+            showToast("Release processado com sucesso via Motor Local (Limite de IA atingido)!");
+          } else {
+            showToast("Release processado com sucesso via Motor Local (Falha de comunicação com a IA)!");
+          }
         } else {
           showToast("Seu Release Semanal foi gerado com sucesso!");
         }

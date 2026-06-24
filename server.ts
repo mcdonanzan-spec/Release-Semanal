@@ -74,9 +74,37 @@ async function generateContentWithRetry(ai: GoogleGenAI, options: any, maxRetrie
   throw lastError;
 }
 
-// Healthy endpoint
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
+// Healthy endpoint with Gemini API connection diagnostic test
+app.get("/api/health", async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const statusInfo = {
+    status: "ok",
+    time: new Date().toISOString(),
+    apiKeyConfigured: !!apiKey,
+    apiKeyLength: apiKey ? apiKey.length : 0,
+    geminiTest: "not_tested",
+    errorDetails: ""
+  };
+
+  if (apiKey) {
+    try {
+      const ai = getGeminiClient();
+      const testResponse = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: "responder 'ok'",
+      });
+      statusInfo.geminiTest = "success";
+      statusInfo.errorDetails = testResponse.text || "Sucesso";
+    } catch (e: any) {
+      statusInfo.geminiTest = "failed";
+      statusInfo.errorDetails = e.message || String(e);
+    }
+  } else {
+    statusInfo.geminiTest = "no_key";
+    statusInfo.errorDetails = "Chave GEMINI_API_KEY vazia ou inexistente no ambiente.";
+  }
+
+  res.json(statusInfo);
 });
 
 // Endpoint: Categorize a single note text using Gemini 3.5 Flash
@@ -170,17 +198,20 @@ function generateLocalFallbackRelease(notes: any[], startDate: string, endDate: 
   };
 
   notes.forEach((n: any) => {
+    if (!n) return;
     const cat = n.category || "Outros";
+    const noteText = n.text ? String(n.text).trim() : "";
     if (categories[cat]) {
-      categories[cat].push(n.text);
+      categories[cat].push(noteText);
     } else {
-      categories["Outros"].push(n.text);
+      categories["Outros"].push(noteText);
     }
   });
 
   // Sophisticated verbal styling to match senior corporate compliance tone
   const formalize = (text: string, category: string) => {
-    let t = text.trim();
+    let t = (text || "").trim();
+    if (!t) return "";
     t = t.replace(/^(fiz|fizemos|efetuei|conclui|concluí|realizei|realizamos)\s+/i, "");
     t = t.charAt(0).toUpperCase() + t.slice(1);
     if (!t.endsWith(".")) t += ".";
@@ -198,15 +229,15 @@ function generateLocalFallbackRelease(notes: any[], startDate: string, endDate: 
   };
 
   const formatted = {
-    liberacoes: categories["Liberações"].map(n => formalize(n, "Liberações")),
-    pendencias: categories["Pendências"].map(n => formalize(n, "Pendências")),
-    cobrancas: categories["Cobranças"].map(n => formalize(n, "Cobranças")),
-    reunioes: categories["Reuniões"].map(n => formalize(n, "Reuniões")),
-    atendimentos: categories["Atendimentos"].map(n => formalize(n, "Atendimentos")),
-    melhorias: categories["Melhorias de processo"].map(n => formalize(n, "Melhorias de processo")),
-    riscos: categories["Riscos"].map(n => formalize(n, "Riscos")),
-    resultados: categories["Resultados"].map(n => formalize(n, "Resultados")),
-    outros: categories["Outros"].map(n => formalize(n, "Outros"))
+    liberacoes: categories["Liberações"].map(n => formalize(n, "Liberações")).filter(Boolean),
+    pendencias: categories["Pendências"].map(n => formalize(n, "Pendências")).filter(Boolean),
+    cobrancas: categories["Cobranças"].map(n => formalize(n, "Cobranças")).filter(Boolean),
+    reunioes: categories["Reuniões"].map(n => formalize(n, "Reuniões")).filter(Boolean),
+    atendimentos: categories["Atendimentos"].map(n => formalize(n, "Atendimentos")).filter(Boolean),
+    melhorias: categories["Melhorias de processo"].map(n => formalize(n, "Melhorias de processo")).filter(Boolean),
+    riscos: categories["Riscos"].map(n => formalize(n, "Riscos")).filter(Boolean),
+    resultados: categories["Resultados"].map(n => formalize(n, "Resultados")).filter(Boolean),
+    outros: categories["Outros"].map(n => formalize(n, "Outros")).filter(Boolean)
   };
 
   const totalNotes = notes.length;
@@ -341,7 +372,7 @@ function generateLocalFallbackRelease(notes: any[], startDate: string, endDate: 
 
 // Endpoint: Generate the entire multi-mode release from a list of notes
 app.post("/api/generate-release", async (req, res) => {
-  const { notes, startDate, endDate } = req.body;
+  const { notes, startDate, endDate } = req.body || {};
   if (!notes || !Array.isArray(notes) || notes.length === 0) {
     res.status(400).json({ error: "Uma lista de anotações é obrigatória para gerar o release." });
     return;
@@ -353,10 +384,13 @@ app.post("/api/generate-release", async (req, res) => {
     // Prepare note data with categorized context
     const groupedNotesStr = notes
       .map((n: any, idx: number) => {
+        if (!n) return "";
         const dateStr = n.date ? `[Data: ${n.date}]` : "";
         const catStr = n.category ? `[Categoria: ${n.category}]` : "";
-        return `${idx + 1}. ${dateStr}${catStr} ${n.text}`;
+        const textStr = n.text ? String(n.text).trim() : "";
+        return `${idx + 1}. ${dateStr}${catStr} ${textStr}`;
       })
+      .filter(Boolean)
       .join("\n");
 
     const systemInstruction = `Você é um Gerente Executivo Sênior especialista em Terceirização, Gestão de Terceiros e Compliance Corporativo. 
@@ -442,18 +476,39 @@ Orientações para as saídas:
     });
   } catch (error: any) {
     console.error("Erro ao gerar release semanal (acionando fallback local):", error);
-    const errorStr = typeof error === "object" ? JSON.stringify(error) : String(error);
-    const isQuotaExceeded = errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED") || errorStr.includes("quota");
     
+    let errorStr = "";
+    try {
+      errorStr = error && typeof error === "object" 
+        ? (error.message || error.status || JSON.stringify(error)) 
+        : String(error);
+    } catch (e) {
+      errorStr = String(error?.message || error || "Erro circular/indefinido");
+    }
+
+    const isNoKey = !process.env.GEMINI_API_KEY || errorStr.includes("não está configurada") || errorStr.includes("API key not configured") || errorStr.includes("API_KEY");
+    const isQuotaExceeded = errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED") || errorStr.includes("quota");
+    const isInvalidKey = errorStr.includes("API key not valid") || errorStr.includes("invalid api key") || errorStr.includes("INVALID_ARGUMENT") || errorStr.includes("Key not valid");
+    
+    let fallbackReason = "api_error";
+    if (isNoKey) {
+      fallbackReason = "no_api_key";
+    } else if (isQuotaExceeded) {
+      fallbackReason = "quota_exhausted";
+    } else if (isInvalidKey) {
+      fallbackReason = "invalid_api_key";
+    }
+
     // Fallback automatically with no disruption to the user experience!
     try {
-      console.log("[Fallback Engine] Ativando mecanismo de contingência local estruturado devido a overload de quota/serviço.");
+      console.log(`[Fallback Engine] Ativando mecanismo de contingência local estruturado. Razão: ${fallbackReason}. Detalhes: ${errorStr}`);
       const localRelease = generateLocalFallbackRelease(notes, startDate, endDate);
       res.json({
         success: true,
         data: localRelease,
         isFallback: true,
-        fallbackReason: isQuotaExceeded ? "quota_exhausted" : "api_error"
+        fallbackReason: fallbackReason,
+        errorDetails: errorStr
       });
     } catch (fallbackError: any) {
       console.error("Erro drástico no próprio motor de fallback:", fallbackError);

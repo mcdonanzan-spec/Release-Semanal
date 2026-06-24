@@ -445,14 +445,50 @@ export default function ReleaseViewer({
           {/* Active Content Preview Tab Box */}
           <div className="p-6 relative">
             {currentRelease.isFallback && (
-              <div className="no-print mb-6 p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-slate-800 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-slate-200 antialiased text-xs flex flex-col space-y-1 shadow-3xs">
+              <div className="no-print mb-6 p-4 rounded-xl bg-amber-50/75 border border-amber-200 text-slate-800 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-slate-200 antialiased text-xs flex flex-col space-y-2 shadow-3xs">
                 <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-400">
                   <CheckCircle className="h-4 w-4" />
-                  <span>Relatório Consolidado via Inteligência de Contingência</span>
+                  <span>
+                    {currentRelease.fallbackReason === "no_api_key" && "Chave GEMINI_API_KEY não configurada nos Secrets"}
+                    {currentRelease.fallbackReason === "invalid_api_key" && "Chave GEMINI_API_KEY Inválida ou Recusada"}
+                    {currentRelease.fallbackReason === "quota_exhausted" && "Limite de Cota do Google Gemini Atingido"}
+                    {currentRelease.fallbackReason === "api_error" && "Instabilidade Temporária com o Servidor de IA"}
+                  </span>
                 </div>
-                <p className="opacity-95 leading-relaxed m-0 mt-0.5 whitespace-normal">
-                  Devido à altíssima demanda do servidor de IA do Google (Limite de Cota Atingido), nosso <strong>Motor Local de Compliance da Unitá</strong> assumiu o processamento de forma inteligente. Suas anotações foram analisadas e os modelos abaixo foram gerados com total rigor corporativo e qualidade técnica!
+                
+                <p className="opacity-95 leading-relaxed m-0 whitespace-normal">
+                  {currentRelease.fallbackReason === "no_api_key" && (
+                    <>
+                      Detectamos que a chave de API do Gemini não está configurada nos segredos deste ambiente. Por favor, acesse o painel superior <strong>Configurações &gt; Secrets</strong> (ou Settings &gt; Secrets) no topo da tela, clique para adicionar um segredo com o nome <strong>GEMINI_API_KEY</strong> com sua chave do Google AI Studio e salve. Enquanto isso, nosso <strong>Motor Local de Compliance da Unitá</strong> assumiu o processamento de forma inteligente!
+                    </>
+                  )}
+                  {currentRelease.fallbackReason === "invalid_api_key" && (
+                    <>
+                      A chave <strong>GEMINI_API_KEY</strong> inserida nas Configurações do projeto foi recusada pelo servidor do Google Gemini (retornou chave inválida). Por favor, revise o valor cadastrado acessando <strong>Configurações &gt; Secrets</strong> no painel superior. Enquanto isso, o <strong>Motor Local de Compliance</strong> processou suas anotações com sucesso!
+                    </>
+                  )}
+                  {currentRelease.fallbackReason === "quota_exhausted" && (
+                    <>
+                      Devido à altíssima demanda do servidor gratuito da IA do Google (Limite de Cota Atingido), nosso <strong>Motor Local de Compliance da Unitá</strong> assumiu o processamento de forma inteligente de maneira ágil, garantindo que suas entregas não parem.
+                    </>
+                  )}
+                  {currentRelease.fallbackReason === "api_error" && (
+                    <>
+                      Ocorreu um erro inesperado ao conectar-se à API de Inteligência Artificial do Google Gemini. Para garantir que seu trabalho continue sem interrupções, nosso <strong>Motor Local de Compliance da Unitá</strong> assumiu o processamento de forma inteligente e gerou os relatórios abaixo com total rigor corporativo!
+                    </>
+                  )}
                 </p>
+
+                {currentRelease.errorDetails && (
+                  <details className="mt-1 border-t border-amber-200/40 dark:border-amber-900/40 pt-1.5 cursor-pointer select-none">
+                    <summary className="text-[10px] font-medium text-amber-900/70 dark:text-amber-400 hover:opacity-80 transition-opacity">
+                      Ver detalhes técnicos do diagnóstico
+                    </summary>
+                    <div className="mt-1 p-2 rounded bg-amber-100/50 dark:bg-slate-900/60 font-mono text-[10px] leading-relaxed break-all max-h-24 overflow-y-auto cursor-text select-text text-amber-950 dark:text-amber-300">
+                      {currentRelease.errorDetails}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
 
