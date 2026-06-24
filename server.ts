@@ -39,13 +39,25 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
-// Robust retry wrapper to handle temporary 503 UNAVAILABLE or 429 overloads cleanly
-async function generateContentWithRetry(ai: GoogleGenAI, options: any, maxRetries = 3, baseDelayMs = 1500) {
+// Robust retry wrapper to handle temporary 503 UNAVAILABLE, 429 overloads, or model high-demand spikes
+async function generateContentWithRetry(ai: GoogleGenAI, options: any, maxRetries = 4, baseDelayMs = 1200) {
   let lastError: any = null;
+  const originalModel = options.model || "gemini-3.5-flash";
+  
+  // List of highly available text flash models to rotate through under heavy demand
+  const flashModelRotation = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+  let currentModel = originalModel;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await ai.models.generateContent(options);
+      console.log(`[Gemini API] Iniciando chamada: modelo='${currentModel}' (Tentativa ${attempt}/${maxRetries})`);
+      const callOptions = { ...options, model: currentModel };
+      const result = await ai.models.generateContent(callOptions);
+      
+      if (currentModel !== originalModel) {
+        console.info(`[Gemini API] SUCESSO com o modelo de contingência de IA '${currentModel}' após instabilidade no modelo original '${originalModel}'!`);
+      }
+      return result;
     } catch (error: any) {
       lastError = error;
       const errorStr = typeof error === "object" ? JSON.stringify(error) : String(error);
@@ -58,11 +70,21 @@ async function generateContentWithRetry(ai: GoogleGenAI, options: any, maxRetrie
         errorMessage.includes("429") ||
         errorMessage.includes("RESOURCE_EXHAUSTED") ||
         errorStr.includes("503") ||
-        errorStr.includes("UNAVAILABLE");
+        errorStr.includes("UNAVAILABLE") ||
+        errorStr.includes("RESOURCE_EXHAUSTED");
 
-      console.warn(`[Gemini API] Tentativa ${attempt}/${maxRetries} falhou. Erro detectado: ${errorMessage.substring(0, 200)}`);
+      console.warn(`[Gemini API] Tentativa ${attempt}/${maxRetries} falhou com o modelo '${currentModel}'. Erro detectado: ${errorMessage.substring(0, 250)}`);
       
       if (isTemporary && attempt < maxRetries) {
+        // Rotate the model if we are using one of the general text flash models
+        if (flashModelRotation.includes(originalModel)) {
+          const currentIndex = flashModelRotation.indexOf(currentModel);
+          // Get next model in the rotation list
+          const nextIndex = (currentIndex + 1) % flashModelRotation.length;
+          currentModel = flashModelRotation[nextIndex];
+          console.log(`[Gemini API API Fallback] Alternando modelo devido a alta demanda. Próximo modelo de contingência: '${currentModel}'`);
+        }
+        
         const delay = baseDelayMs * attempt;
         console.log(`[Gemini API] Aguardando ${delay}ms antes de tentar novamente (tentativa ${attempt + 1})...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
